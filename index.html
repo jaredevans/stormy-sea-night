@@ -18,6 +18,15 @@
   #hud .keys span { cursor: pointer; border-bottom: 1px dotted rgba(180, 198, 225, .35); }
   #hud .keys span:hover { color: rgba(235, 242, 255, .9); }
   #hud.hidden { opacity: 0; pointer-events: none; }
+  #msg { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+         pointer-events: none; opacity: 0; transition: opacity .5s; text-align: center; color: #eef3fb;
+         background: radial-gradient(ellipse at center, rgba(2, 5, 12, .62), rgba(2, 5, 12, 0) 70%);
+         font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; text-transform: uppercase; text-shadow: 0 2px 8px #000; }
+  #msg.on { opacity: 1; }
+  #msg h1 { margin: 0; font-size: clamp(28px, 6vw, 64px); font-weight: 600; letter-spacing: .22em; }
+  #msg p { margin: .7em 1.5em 0; font-size: clamp(11px, 1.5vw, 15px); letter-spacing: .12em; line-height: 1.8; color: rgba(215, 226, 244, .88); }
+  #msg b { color: #fff; }
+  #hud .risk-high { color: #ff8a6b; }
   #err { position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
          color: #cfd8e8; font: 15px/1.5 system-ui, sans-serif; text-align: center; padding: 2em; }
 </style>
@@ -32,9 +41,10 @@
 </head>
 <body>
 <div id="hud">
-  <div>Wind <b id="h-wind">--</b> kt &nbsp;·&nbsp; Seas <b>15</b> m &nbsp;·&nbsp; Heel <b id="h-heel">--</b>° &nbsp;·&nbsp; Pitch <b id="h-pitch">--</b>° &nbsp;·&nbsp; Speed <b id="h-sog">--</b> kt</div>
-  <div class="keys">Drag to orbit · Scroll to zoom · <span data-k="c">C camera</span> · <span data-k="l">L deck lights</span> · <span data-k=" ">Space pause</span> · <span data-k="h">H hide</span></div>
+  <div>Wind <b id="h-wind">--</b> kt &nbsp;·&nbsp; Seas <b>15</b> m &nbsp;·&nbsp; Heel <b id="h-heel">--</b>° &nbsp;·&nbsp; Pitch <b id="h-pitch">--</b>° &nbsp;·&nbsp; Speed <b id="h-sog">--</b> kt &nbsp;·&nbsp; Wind angle <b id="h-twa">--</b> &nbsp;·&nbsp; Sheet <b id="h-trim">--</b>% &nbsp;·&nbsp; Capsize risk <b id="h-risk">--</b> &nbsp;·&nbsp; Afloat <b id="h-afloat">0:00</b></div>
+  <div class="keys">←/→ steer · ↑/↓ sheet in / ease · Drag to orbit · Scroll to zoom · <span data-k="c">C camera</span> · <span data-k="l">L deck lights</span> · <span data-k=" ">Space pause</span> · <span data-k="h">H hide</span></div>
 </div>
+<div id="msg" role="status" aria-live="assertive"><h1>Capsized</h1><p id="msg-why"></p><p>Starting over in <b id="msg-n">5</b></p></div>
 <div id="err">This scene needs WebGL 2 and an internet connection (three.js loads from a CDN).</div>
 
 <script type="module">
@@ -607,8 +617,9 @@ for (const s of [-1, 1]) {
 }
 const HELM_X = -5.3, HELM_Y = deckY(-5.3, 0);
 box(0.2, 0.95, 0.2, HELM_X, HELM_Y + 0.47, 0, M.gel);
+const helmWheel = new THREE.Group();
 {
-  const wheel = new THREE.Group(); wheel.position.set(HELM_X - 0.16, HELM_Y + 0.98, 0); wheel.rotation.y = Math.PI / 2; boat.add(wheel);
+  const wheel = helmWheel; wheel.position.set(HELM_X - 0.16, HELM_Y + 0.98, 0); wheel.rotation.y = Math.PI / 2; boat.add(wheel);
   addMesh(new THREE.TorusGeometry(0.5, 0.02, 8, 40), M.steel, wheel);
   for (let i = 0; i < 4; i++) { const sp = addMesh(new THREE.CylinderGeometry(0.012, 0.012, 1.0, 6), M.steel, wheel); sp.rotation.z = i * Math.PI / 4; }
 }
@@ -617,8 +628,9 @@ function cyl(a, b, r, mat, parent = boat, r2 = r) {
   m.position.copy(a).addScaledVector(d, 0.5); m.quaternion.setFromUnitVectors(new V3(0, 1, 0), d.normalize()); return m;
 }
 // ── helmsman, braced to windward
+const helmsman = new THREE.Group();
 {
-  const f = new THREE.Group(); f.position.set(HELM_X - 0.78, deckY(HELM_X - 0.78, 0), 0.12); f.rotation.x = 0.30; boat.add(f);
+  const f = helmsman; f.position.set(HELM_X - 0.78, deckY(HELM_X - 0.78, 0), 0.12); f.rotation.x = 0.30; boat.add(f);
   for (const s of [-1, 1]) cyl(new V3(0, 0, s * 0.16), new V3(0.03, 0.88, s * 0.11), 0.085, M.foulies, f);
   const torso = addMesh(new THREE.CapsuleGeometry(0.2, 0.38, 6, 14), M.foulies, f); torso.position.set(0.07, 1.2, 0); torso.rotation.z = -0.2;
   const hood = addMesh(new THREE.SphereGeometry(0.135, 16, 12), M.foulies, f); hood.position.set(0.16, 1.66, 0);
@@ -630,15 +642,15 @@ function cyl(a, b, r, mat, parent = boat, r2 = r) {
 // ── keel, bulb, rudder
 box(1.7, 2.0, 0.16, -0.3, -1.65, 0, M.dark);
 { const b = addMesh(new THREE.SphereGeometry(1, 20, 12), M.dark); b.scale.set(1.6, 0.26, 0.3); b.position.set(-0.2, -2.7, 0); }
-box(0.55, 1.9, 0.07, -6.35, -0.85, 0, M.dark);
+const rudderBlade = box(0.55, 1.9, 0.07, -6.35, -0.85, 0, M.dark);
 
 // ── spars
 const MX = 1.3, DK = deckY(MX, 0), MAST_TOP = DK + 20.6;
 cyl(new V3(MX, DK, 0), new V3(MX, MAST_TOP, 0), 0.115, M.spar, boat, 0.075);
 const SPR = [[DK + 7.4, 1.32], [DK + 13.9, 1.0]];
 for (const [y, w] of SPR) box(0.1, 0.045, 2 * w, MX - 0.05, y, 0, M.spar);
-const GOOSE_Y = DK + 1.85, BOOM_ANG = -0.30;
-const boomG = new THREE.Group(); boomG.position.set(MX, GOOSE_Y, 0); boomG.rotation.y = BOOM_ANG; boat.add(boomG);
+const GOOSE_Y = DK + 1.85;
+const boomG = new THREE.Group(); boomG.position.set(MX, GOOSE_Y, 0); boomG.rotation.y = -0.30; boat.add(boomG);
 cyl(new V3(-0.1, 0, 0), new V3(-5.5, 0, 0), 0.095, M.spar, boomG);
 { // reefed sail flaked along the boom
   const fl = addMesh(new THREE.CapsuleGeometry(0.14, 4.6, 6, 12), M.mainsail, boomG);
@@ -671,32 +683,30 @@ cyl(new V3(-0.1, 0, 0), new V3(-5.5, 0, 0), 0.095, M.spar, boomG);
   }
   const su = 0.012, sx = -LOA / 2 + su * LOA, sy = sheer(su) + 0.03, sz = hb(su) - 0.08;
   L2([sx, sy + 0.64, -sz], [sx, sy + 0.64, sz]); L2([sx, sy + 0.33, -sz], [sx, sy + 0.33, sz]);   // pushpit
-  // sheets and vang
-  const be = 4.6; L2([MX - be * Math.cos(BOOM_ANG), GOOSE_Y - 0.08, be * Math.sin(BOOM_ANG)], [-2.2, deckY(-2.2, 0) + 0.3, 0]);
-  L2([MX - 1.6 * Math.cos(BOOM_ANG), GOOSE_Y - 0.08, 1.6 * Math.sin(BOOM_ANG)], [MX, DK + 0.5, 0]);
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(seg, 3));
   boat.add(new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: new THREE.Color(0.055, 0.065, 0.08) })));
 }
 // ── sails: storm jib on the inner forestay + deep-reefed main
-function makeSail(tack, head, clew, mat, parent, camber, sheetLine) {
+function makeSail(tack, head, clew, mat, parent, camber) {
   const n = 14, cnt = (n + 1) * (n + 1), pos = new Float32Array(cnt * 3);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3).setUsage(THREE.DynamicDrawUsage));
   g.setIndex(gridIndex(n + 1, n + 1));
   const mesh = addMesh(g, mat, parent); mesh.frustumCulled = false; mesh.receiveShadow = false;
-  const nrm = new V3().subVectors(head, tack).cross(new V3().subVectors(clew, tack)).normalize();
-  if (nrm.z > 0) nrm.negate();                                  // belly to leeward (port)
-  const luff = new V3(), leech = new V3(), p = new V3();
-  return (t, load) => {
+  const nrm = new V3(), e1 = new V3(), e2 = new V3(), luff = new V3(), leech = new V3(), p = new V3();
+  // load 0..1 = how hard the sail is drawing; sgn = +1 belly to port, −1 to starboard; flog = flutter amplitude
+  return (t, load, sgn, flog) => {
+    nrm.crossVectors(e1.subVectors(head, tack), e2.subVectors(clew, tack)).normalize();
+    if (nrm.z > 0) nrm.negate();
     let o = 0;
     for (let i = 0; i <= n; i++) {
       const a = i / n; luff.lerpVectors(tack, head, a); leech.lerpVectors(clew, head, a);
       const chord = luff.distanceTo(leech);
       for (let j = 0; j <= n; j++) {
         const c = j / n; p.lerpVectors(luff, leech, c);
-        const belly = camber * load * chord * 4 * c * (1 - c) * (0.75 + 0.5 * c);
-        const flog = chord * c * c * (0.035 * Math.sin(c * 8 - t * 17 + a * 6) + 0.02 * Math.sin(c * 15 - t * 29 + a * 11)) * (1.6 - load);
-        p.addScaledVector(nrm, belly + flog);
+        const belly = camber * load * sgn * chord * 4 * c * (1 - c) * (0.75 + 0.5 * c);
+        const flap = chord * c * c * (0.035 * Math.sin(c * 8 - t * 17 + a * 6) + 0.02 * Math.sin(c * 15 - t * 29 + a * 11)) * flog;
+        p.addScaledVector(nrm, belly + flap);
         pos[o++] = p.x; pos[o++] = p.y; pos[o++] = p.z;
       }
     }
@@ -704,11 +714,19 @@ function makeSail(tack, head, clew, mat, parent, camber, sheetLine) {
   };
 }
 const STAY_B = new V3(5.7, deckY(5.7, 0), 0), STAY_T = new V3(MX, DK + 13.3, 0);
-const updJib = makeSail(new V3().lerpVectors(STAY_B, STAY_T, 0.07), new V3().lerpVectors(STAY_B, STAY_T, 0.56), new V3(2.2, DK + 1.35, -1.6), M.storm, boat, 0.11);
+const JIB_CLEW = new V3(2.2, DK + 1.35, -1.6);
+const updJib = makeSail(new V3().lerpVectors(STAY_B, STAY_T, 0.07), new V3().lerpVectors(STAY_B, STAY_T, 0.56), JIB_CLEW, M.storm, boat, 0.11);
 const updMain = makeSail(new V3(-0.14, 0.12, 0), new V3(-0.14, 8.4, 0), new V3(-3.5, 0.3, 0), M.mainsail, boomG, 0.10);
-{ // jib sheet
-  const g = new THREE.BufferGeometry().setFromPoints([new V3(2.2, DK + 1.35, -1.6), new V3(-1.9, deckY(-1.9, 1.9) + 0.2, -1.85)]);
-  boat.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: new THREE.Color(0.055, 0.065, 0.08) })));
+// running rigging that moves with the sails: jib sheet, mainsheet, vang
+const runGeo = new THREE.BufferGeometry();
+runGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(18), 3).setUsage(THREE.DynamicDrawUsage));
+{ const l = new THREE.LineSegments(runGeo, new THREE.LineBasicMaterial({ color: new THREE.Color(0.055, 0.065, 0.08) })); l.frustumCulled = false; boat.add(l); }
+function updRunningRig(boomAng, sgn) {
+  const a = runGeo.attributes.position.array, c = Math.cos(boomAng), sn = Math.sin(boomAng);
+  a.set([JIB_CLEW.x, JIB_CLEW.y, JIB_CLEW.z, -1.9, deckY(-1.9, 1.9) + 0.2, -1.85 * sgn,
+    MX - 4.6 * c, GOOSE_Y - 0.08, 4.6 * sn, -2.2, deckY(-2.2, 0) + 0.3, 0,
+    MX - 1.6 * c, GOOSE_Y - 0.08, 1.6 * sn, MX, DK + 0.5, 0]);
+  runGeo.attributes.position.needsUpdate = true;
 }
 // ── navigation + deck lights
 const lamp = (r, g, b, x, y, z) => { const m = new THREE.Mesh(new THREE.SphereGeometry(0.055, 10, 8), new THREE.MeshBasicMaterial({ color: new THREE.Color(r, g, b) })); m.position.set(x, y, z); boat.add(m); return m; };
@@ -823,18 +841,33 @@ const CAMS = [
   { name: 'aerial', pos: [-70, 46, 62], fov: 36 },
   { name: 'bow-on', pos: [34, 5, -6], fov: 40 },
 ];
-let camIdx = 0, camLift = 0;
+let camIdx = 0, camLift = 0, camHeading = 0.62;
+const Y_AXIS = new V3(0, 1, 0);
 function setCam(i) {
   camIdx = (i + CAMS.length) % CAMS.length;
   const c = CAMS[camIdx];
   camera.fov = c.fov; camera.updateProjectionMatrix();
   controls.enabled = c.name !== 'deck';
-  if (c.pos) { camera.position.set(c.pos[0], c.pos[1] + controls.target.y - 5.5, c.pos[2]); camLift = 0; }
+  if (c.pos) {                                                   // presets are framed relative to the boat's heading
+    camera.position.set(c.pos[0], c.pos[1], c.pos[2]).applyAxisAngle(Y_AXIS, camHeading - 0.62);
+    camera.position.y += controls.target.y - 5.5; camLift = 0;
+  }
 }
-setCam(0);
 
 /* ───────────────────────────── Simulation ───────────────────────────── */
-const st = { yaw: 0.62, pitch: 0, roll: -0.3, y: 0, vy: 0, vp: 0, vr: 0, pY: null, pP: 0, pR: 0, speed: 3.4, wx: 0, wz: 0, gust: 0, heel: 0, bowImm: 0 };
+const WIND_PSI = Math.atan2(-WIND.z, -WIND.x) * -1;            // heading that points straight into the wind
+const keys = { left: false, right: false, up: false, down: false };
+// boat speed as a fraction of maximum, by true wind angle (deg): can't sail closer than ~22° to the wind
+const POLAR = [[0, -0.11], [22, 0], [35, 0.55], [50, 0.72], [70, 0.86], [100, 1.0], [135, 1.0], [160, 0.9], [180, 0.82]];
+function polar(aw) {
+  const d = aw * 57.2958;
+  for (let i = 1; i < POLAR.length; i++) if (d <= POLAR[i][0]) { const [a0, v0] = POLAR[i - 1], [a1, v1] = POLAR[i]; return lerp(v0, v1, (d - a0) / (a1 - a0)); }
+  return POLAR[POLAR.length - 1][1];
+}
+const START = { heading: 0.62, rudder: 0, trim: 0.75, twa: 0.55, side: 1, luff: 0, boom: -0.30, roll: -0.3, vy: 0, vp: 0, vr: 0, pY: null, speed: 3.4, capsized: false, risk: 0 };
+const SEA = { gain: 0.88, j0: 0.50, j1: 0.72, b0: 0.68, b1: 0.98, t0: 0.45, t1: 0.95 };   // breaking-sea knockdown tuning
+const CAPSIZE_ROLL = 1.2;                                        // rad (~69°): past this she does not come back
+const st = { capsized: false, capDir: 0, capT: 0, capWhy: '', afloat: 0, risk: 0, capsizes: 0, heading: 0.62, rudder: 0, trim: 0.75, twa: 0.55, side: 1, luff: 0, boom: -0.30, yaw: 0.62, pitch: 0, roll: -0.3, y: 0, vy: 0, vp: 0, vr: 0, pY: null, pP: 0, pR: 0, speed: 3.4, wx: 0, wz: 0, gust: 0, heel: 0, bowImm: 0 };
 let simT = 40, paused = false, deckOn = true;
 const _v = new V3(), _b = new V3();
 
@@ -845,19 +878,59 @@ function stepBoat(dt, t) {
   const hC = H(0, 0), hB = H(fx * 5.6, fz * 5.6), hS = H(-fx * 5.6, -fz * 5.6), hR = H(rx * 1.8, rz * 1.8), hL = H(-rx * 1.8, -rz * 1.8);
   st.gust = 0.5 + 0.5 * Math.sin(t * 0.41) * Math.sin(t * 0.87 + 1.3) + 0.15 * Math.sin(t * 2.3);
   const exposed = sstep(-5.5, 3.5, st.y);                           // sheltered in the troughs, hammered on the crests
-  st.heel = -(0.20 + 0.28 * exposed * (0.78 + 0.22 * st.gust));
+  // helm and sails: ←/→ rudder, ↑/↓ sheet in / ease. The sails set themselves to the wind angle.
+  const live = st.capsized ? 0 : 1;
+  st.rudder += (((keys.left ? 1 : 0) - (keys.right ? 1 : 0)) * live - st.rudder) * Math.min(1, dt * 3.5);
+  st.trim = clamp(st.trim + ((keys.up ? 1 : 0) - (keys.down ? 1 : 0)) * live * 0.35 * dt, 0.15, 1);
+  const dW = st.heading - WIND_PSI;
+  st.twa = Math.atan2(Math.sin(dW), Math.cos(dW));                 // + = wind over the starboard side
+  const aw = Math.abs(st.twa);
+  st.side += (clamp(Math.sin(st.twa) / 0.25, -1, 1) - st.side) * Math.min(1, dt * 2.5);   // sails fill on the new tack
+  st.luff = 1 - sstep(0.30, 0.56, aw);                             // head to wind: sails flog, no drive
+  const sgn = st.side >= 0 ? 1 : -1;
+  const heelK = sstep(0.17, 0.6, aw) * (1 - 0.72 * sstep(1.75, 2.95, aw)) * (0.35 + 0.87 * st.trim);
+  st.heel = -st.side * (0.20 + 0.28 * exposed * (0.78 + 0.22 * st.gust)) * heelK;
+  const boomT = -st.side * clamp((0.5 * aw + 0.03) * (1.45 - 0.6 * st.trim), 0.09, 1.38) + 0.07 * st.luff * Math.sin(t * 5.3);
+  st.boom += (boomT - st.boom) * Math.min(1, dt * 4);
+  boomG.rotation.y = st.boom;
+  JIB_CLEW.set(2.2 + 0.45 * sstep(0.9, 2.4, aw), DK + 1.35, -st.side * clamp(0.75 + 0.95 * aw, 1.25, 2.3));
+  st.load = (0.75 + 0.25 * st.gust) * (0.5 + 0.62 * st.trim) * (1 - st.luff) * Math.abs(st.side) * live;
+  const flog = 0.55 + 2.7 * clamp(1 - st.load, 0, 1);
+  updJib(t, st.load, sgn, flog); updMain(t, st.load, sgn, flog);
+  updRunningRig(st.boom, sgn);
+  helmWheel.rotation.z = -st.rudder * 2.4; rudderBlade.rotation.y = -st.rudder * 0.5; helmsman.rotation.x = 0.30 * st.side;
   const tY = 0.30 * hC + 0.20 * (hB + hS) + 0.15 * (hR + hL) - 0.04;
   const tP = Math.atan2(hB - hS, 11.2);
-  const tR = Math.atan2(hL - hR, 3.6) * 0.6 + st.heel;
+  // A breaking crest striking the beam throws the hull down-wave. Bow-on or stern-on it passes harmlessly;
+  // beam-on, and worse with the sheets hard in, it can roll her past the point of no return.
+  waveDisp(st.wx, st.wz, t, _d, true);
+  const breaking = 1 - sstep(SEA.j0, SEA.j1, _d.J);
+  const beamK = sstep(SEA.b0, SEA.b1, Math.abs(Math.sin(st.twa)));
+  st.risk = beamK * (0.45 + 0.55 * st.trim);
+  const hit = breaking * beamK * (SEA.t0 + SEA.t1 * st.trim) * SEA.gain;
+  let tR = Math.atan2(hL - hR, 3.6) * 0.6 + st.heel - sgn * hit;
+  if (st.capsized) tR = st.capDir * 2.85;
   if (st.pY === null) { st.pY = tY; st.pP = tP; st.pR = tR; st.y = tY; st.pitch = tP; st.roll = tR; }
   const dY = (tY - st.pY) / dt, dP = (tP - st.pP) / dt, dR = (tR - st.pR) / dt;   // rates of the water itself
   st.pY = tY; st.pP = tP; st.pR = tR;
   st.vy += (10.0 * (tY - st.y) - 4.4 * (st.vy - dY)) * dt; st.y += st.vy * dt;
   st.vp += (7.0 * (tP - st.pitch) - 3.2 * (st.vp - 0.85 * dP)) * dt; st.pitch += st.vp * dt;
-  st.vr += (5.0 * (tR - st.roll) - 2.0 * (st.vr - 0.6 * dR)) * dt; st.roll += st.vr * dt;
-  st.speed += ((3.4 - st.speed) * 0.5 - G * Math.sin(st.pitch) * 0.26) * dt;      // labours uphill, surges down the back
-  st.speed = clamp(st.speed, 0.5, 8.5);
-  st.yaw = 0.62 + 0.07 * Math.sin(t * 0.11) + 0.045 * Math.sin(t * 0.23 + 2.0) + 0.14 * Math.max(st.pitch, 0);
+  if (st.capsized) st.vr += (1.7 * (tR - st.roll) - 2.5 * st.vr) * dt;       // rolls on over, slowly
+  else st.vr += (5.0 * (tR - st.roll) - 2.0 * (st.vr - 0.6 * dR)) * dt;
+  st.roll += st.vr * dt;
+  if (!st.capsized) {
+    st.afloat += dt;
+    if (Math.abs(st.roll) > CAPSIZE_ROLL) {
+      st.capsized = true; st.capDir = Math.sign(st.roll); st.capT = 0; st.capsizes++;
+      st.capWhy = st.trim > 0.6 ? 'Knocked down beam-on to a breaking sea with the sheets hard in.' : 'Rolled beam-on by a breaking sea.';
+    }
+  }
+  const vT = 6.2 * polar(aw) * (0.4 + 0.8 * st.trim) * (1 - 0.15 * Math.abs(st.rudder)) * live;
+  st.speed += ((vT - st.speed) * 0.5 - G * Math.sin(st.pitch) * 0.26) * dt;       // labours uphill, surges down the back
+  st.speed = clamp(st.speed, -1.5, 9);
+  st.heading += st.rudder * 0.34 * clamp(Math.max(st.speed, 0.9) / 3.0, 0.3, 1.3) * dt;
+  st.heading += (st.twa >= 0 ? 1 : -1) * 0.10 * st.luff * (1 - clamp(st.speed / 2.5, 0, 1)) * dt;   // stalled head to wind, the bow falls off
+  st.yaw = st.heading + 0.05 * Math.sin(t * 0.11) + 0.03 * Math.sin(t * 0.23 + 2.0) + 0.14 * Math.max(st.pitch, 0) * st.side;
   st.wx += fx * st.speed * dt; st.wz += fz * st.speed * dt;
   boat.position.set(0, st.y, 0);
   boat.rotation.set(st.roll, st.yaw, st.pitch);
@@ -888,7 +961,7 @@ function stepSpray(dt, t) {
   }
   // seas breaking against the windward (starboard) side
   for (let i = 0; i < 3 * fr; i++) {
-    const lx = (Math.random() - 0.5) * 13, lz = hb(uOf(lx)) * 0.95;
+    const lx = (Math.random() - 0.5) * 13, lz = hb(uOf(lx)) * 0.95 * (st.side >= 0 ? 1 : -1);
     _v.set(lx, 0.2, lz); boat.localToWorld(_v);
     if (surfaceH(st.wx + _v.x, st.wz + _v.z, t) > _v.y - 0.25)
       emit(_v.x, _v.y + 0.3, _v.z, -4 + Math.random() * 3, 3 + Math.random() * 5, (Math.random() - 0.5) * 3, 1 + Math.random() * 1.2, 0.6 + Math.random() * 0.9, 0.20 + Math.random() * 0.22);
@@ -920,6 +993,22 @@ function stepSpray(dt, t) {
   sprayGeo.attributes.position.needsUpdate = true; sprayGeo.attributes.aDat.needsUpdate = true;
 }
 
+const msgEl = document.getElementById('msg');
+function stepGame(dt) {
+  if (!st.capsized) return;
+  if (st.capT === 0) {
+    const m = Math.floor(st.afloat / 60), sec = Math.floor(st.afloat % 60);
+    document.getElementById('msg-why').innerHTML = st.capWhy + '<br>You stayed afloat for <b>' + m + ':' + String(sec).padStart(2, '0') + '</b>. Keep the bow or stern to the seas, and ease the sheets (↓) when beam-on.';
+    msgEl.classList.add('on');
+    for (let i = 0; i < 260; i++) {                                 // the rig hits the water
+      const a = Math.random() * 6.283, r = Math.random() * 7;
+      emit(Math.cos(a) * r, st.y + 0.3, Math.sin(a) * r, Math.cos(a) * 4, 3 + Math.random() * 8, Math.sin(a) * 4, 1.2 + Math.random() * 1.5, 0.7 + Math.random() * 1.4, 0.25 + Math.random() * 0.3);
+    }
+  }
+  st.capT += dt;
+  document.getElementById('msg-n').textContent = Math.max(1, Math.ceil(5 - st.capT));
+  if (st.capT >= 5) { Object.assign(st, START, { afloat: 0 }); msgEl.classList.remove('on'); }
+}
 let moonVisS = 1;
 function stepSky(dt, t) {
   U.uCloudOff.value.set(4.2 + t * 0.034, 1.7 + t * 0.010, 0.6 + t * 0.011, 2.9 + t * 0.004);
@@ -933,6 +1022,7 @@ function stepSky(dt, t) {
 
 function stepCamera(dt, t) {
   const c = CAMS[camIdx];
+  const dH = st.heading - camHeading; camHeading = st.heading;
   if (c.name === 'deck') {
     _v.set(-7.15, deckY(-7.15, 0) + 2.45, 1.2); boat.localToWorld(_v); camera.position.copy(_v);
     _b.set(9, DK + 2.6, -0.5); boat.localToWorld(_b);
@@ -943,6 +1033,7 @@ function stepCamera(dt, t) {
   camera.up.set(0, 1, 0);
   // the camera rides the same sea on its own patch of water, like a chase boat
   camera.position.y -= camLift;
+  if (dH) { _v.subVectors(camera.position, controls.target).applyAxisAngle(Y_AXIS, dH); camera.position.copy(controls.target).add(_v); }
   const ty = lerp(controls.target.y, st.y + 5.5, 1 - Math.exp(-dt * 1.6));
   camera.position.y += ty - controls.target.y; controls.target.y = ty;
   controls.update();
@@ -970,7 +1061,15 @@ function key(k) {
   else if (k === ' ') paused = !paused;
   else if (k === 'h') hud.classList.toggle('hidden');
 }
-addEventListener('keydown', e => { if (!e.metaKey && !e.ctrlKey) { key(e.key); if (e.key === ' ') e.preventDefault(); } });
+const ARROWS = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down' };
+addEventListener('keydown', e => {
+  if (e.metaKey || e.ctrlKey) return;
+  if (ARROWS[e.key]) { keys[ARROWS[e.key]] = true; e.preventDefault(); return; }
+  if (!e.repeat) key(e.key);
+  if (e.key === ' ') e.preventDefault();
+});
+addEventListener('keyup', e => { if (ARROWS[e.key]) keys[ARROWS[e.key]] = false; });
+addEventListener('blur', () => { keys.left = keys.right = keys.up = keys.down = false; });
 hud.querySelectorAll('[data-k]').forEach(el => el.addEventListener('click', () => key(el.dataset.k)));
 function resize() {
   renderer.setPixelRatio(pixelRatio); renderer.setSize(innerWidth, innerHeight);
@@ -992,7 +1091,7 @@ function frame() {
   simT += dt;
   if (dt > 0) {
     stepBoat(dt, simT);
-    updJib(simT, 0.75 + 0.25 * st.gust); updMain(simT, 0.8 + 0.2 * st.gust);
+    stepGame(dt);
     stepSpray(dt, simT);
     stepSky(dt, simT);
   }
@@ -1010,9 +1109,13 @@ function frame() {
   if (hudT > 0.25) {
     hudT = 0;
     $('h-wind').textContent = Math.round(66 + 16 * st.gust);
-    $('h-heel').textContent = Math.round(Math.abs(st.roll) * 57.3);
+    $('h-heel').textContent = Math.round(Math.min(Math.abs(st.roll), Math.PI) * 57.3);
     $('h-pitch').textContent = (st.pitch >= 0 ? '+' : '−') + Math.abs(Math.round(st.pitch * 57.3));
     $('h-sog').textContent = (st.speed * 1.944).toFixed(1);
+    $('h-twa').textContent = st.luff > 0.6 ? 'in irons' : Math.round(Math.abs(st.twa) * 57.3) + '° ' + (st.twa >= 0 ? 'stbd' : 'port');
+    $('h-trim').textContent = Math.round(st.trim * 100);
+    const rk = $('h-risk'); rk.textContent = st.risk < 0.15 ? 'low' : st.risk < 0.5 ? 'moderate' : 'high'; rk.className = st.risk >= 0.5 ? 'risk-high' : '';
+    $('h-afloat').textContent = Math.floor(st.afloat / 60) + ':' + String(Math.floor(st.afloat % 60)).padStart(2, '0');
   }
   // drop resolution a notch if the GPU is struggling
   perfT += raw; perfN++;
