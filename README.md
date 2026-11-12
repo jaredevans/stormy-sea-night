@@ -6,7 +6,9 @@ A single-file three.js scene: a 50 ft sloop under storm jib and deep-reefed main
 
 ## Run
 
-Open `storm-yacht.html` in a current Chrome, Safari or Edge. It needs WebGL 2 and an internet connection, because three.js r170 loads from the jsDelivr CDN.
+Live: https://jaredevans.github.io/stormy-sea-night/
+
+Or open `index.html` locally in a current Chrome, Safari or Edge. It needs WebGL 2 and an internet connection, because three.js r170 loads from the jsDelivr CDN.
 
 ## Controls
 
