@@ -1,6 +1,6 @@
 # stormy-sea-night
 
-A single-file three.js scene: a 50 ft sloop under storm jib and deep-reefed main, working through hurricane seas running 22–25 m under a full moon and fast-moving cloud. You steer it from the helm.
+A single-file three.js scene: a 50 ft sloop under storm jib and deep-reefed main, working through seas and wind modelled on Hurricane Ivan (2004) under a full moon and fast-moving cloud. You steer it from the helm.
 
 ![View from the helm](captain-view.png)
 
@@ -35,9 +35,21 @@ To stay up:
 - Ease the sheets before turning across the waves, and when running downwind.
 - Pointing closer than about 22° to the wind stalls the boat "in irons".
 
+## Conditions
+
+The sea and wind follow what was measured when Hurricane Ivan crossed Naval Research Laboratory wave gauges in the Gulf of Mexico on 15 September 2004 (Wang et al., *Science*, 2005).
+
+| | Ivan, measured | This scene |
+|---|---|---|
+| Significant wave height | 17.9 m | 17.9 m |
+| Largest waves | 27.7 m | top 1% average about 27 m |
+| Wind | about 200 km/h (108 kt) | 109 kt, gusting higher |
+
+Two deliberate departures: the full moon still breaks through the cloud, where a real eyewall sky would be solid overcast, and the boat keeps its storm sails, which no sail would survive in that wind.
+
 ## How it works
 
-- Sea: eight Gerstner wave trains (dominant wavelength 224 m, period 12 s; significant height about 22 m, largest waves about 27 m), with normals and foam computed per pixel.
+- Sea: twelve Gerstner wave trains, including cross seas up to 60° off the wind, with normals and foam computed per pixel. Five trains of similar size near the dominant wavelength drift in and out of step, so the biggest waves arrive unpredictably.
 - Boat: heave, pitch and roll are driven by the same wave table the surface is drawn with.
 - Sailing: speed follows a simple polar by true wind angle and sheet trim; knockdowns come from breaking crests on the beam.
 - Sky: procedural moon, stars and cloud; moonlight dims as cloud crosses the moon.
