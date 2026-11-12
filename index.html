@@ -41,8 +41,8 @@
 </head>
 <body>
 <div id="hud">
-  <div>Wind <b id="h-wind">--</b> kt &nbsp;·&nbsp; Seas <b>15</b> m &nbsp;·&nbsp; Heel <b id="h-heel">--</b>° &nbsp;·&nbsp; Pitch <b id="h-pitch">--</b>° &nbsp;·&nbsp; Speed <b id="h-sog">--</b> kt &nbsp;·&nbsp; Wind angle <b id="h-twa">--</b> &nbsp;·&nbsp; Sheet <b id="h-trim">--</b>% &nbsp;·&nbsp; Capsize risk <b id="h-risk">--</b> &nbsp;·&nbsp; Afloat <b id="h-afloat">0:00</b></div>
-  <div class="keys">←/→ steer · ↑/↓ sheet in / ease · Drag to orbit · Scroll to zoom · <span data-k="c">C camera</span> · <span data-k="l">L deck lights</span> · <span data-k=" ">Space pause</span> · <span data-k="h">H hide</span></div>
+  <div>Wind <b id="h-wind">--</b> kt &nbsp;·&nbsp; Seas <b>23</b> m · peaks <b>27</b> m &nbsp;·&nbsp; Heel <b id="h-heel">--</b>° &nbsp;·&nbsp; Pitch <b id="h-pitch">--</b>° &nbsp;·&nbsp; Speed <b id="h-sog">--</b> kt &nbsp;·&nbsp; Wind angle <b id="h-twa">--</b> &nbsp;·&nbsp; Sheet <b id="h-trim">--</b>% &nbsp;·&nbsp; Capsize risk <b id="h-risk">--</b> &nbsp;·&nbsp; Afloat <b id="h-afloat">0:00</b></div>
+  <div class="keys">←/→ steer · ↑/↓ sheet in / ease · <span data-k="c">C camera</span> (drag / scroll orbit the outside views) · <span data-k="l">L deck lights</span> · <span data-k=" ">Space pause</span> · <span data-k="h">H hide</span></div>
 </div>
 <div id="msg" role="status" aria-live="assertive"><h1>Capsized</h1><p id="msg-why"></p><p>Starting over in <b id="msg-n">5</b></p></div>
 <div id="err">This scene needs WebGL 2 and an internet connection (three.js loads from a CDN).</div>
@@ -82,15 +82,15 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(42, innerWidth / innerHeight, 0.3, 20000);
 
 /* ───────────────────────────── Sea state ─────────────────────────────
-   Eight trochoidal (Gerstner) wave trains. Significant wave height ≈ 15 m,
-   dominant period ≈ 9.5 s — a mature hurricane sea. The same table drives
+   Eight trochoidal (Gerstner) wave trains. Significant wave height ≈ 23 m
+   (the big seas run 22–25 m crest to trough, the largest about 27 m), dominant period ≈ 12 s — a mature hurricane sea. The same table drives
    the GPU surface and the CPU buoyancy model.                              */
 const G = 9.81, STEEP = 0.92;
 const WIND = new V3(-36, 0, 2.5);            // m/s (≈ 70 kt), blowing toward −x
 const WAVES = [
   // wavelength (m), amplitude (m), heading offset (deg)
-  [140, 4.50,   0], [ 95, 2.40,  16], [ 62, 1.30, -22], [ 45, 0.72,  31],
-  [ 28, 0.40, -37], [ 17, 0.22,  11], [ 11, 0.12, -50], [  7, 0.067, 44],
+  [224, 7.20,   0], [150, 3.80,  16], [ 96, 2.02, -22], [ 62, 0.99,  31],
+  [ 38, 0.544, -37], [ 23, 0.293, 11], [ 14, 0.156, -50], [8.5, 0.081, 44],
 ].map(([L, A, deg], i) => {
   const a = Math.PI + deg * Math.PI / 180, k = 2 * Math.PI / L;
   return { L, A, k, dx: Math.cos(a), dz: Math.sin(a), om: Math.sqrt(G * k), ph: i * 1.713 + 0.4 };
@@ -431,7 +431,7 @@ void main(){
   // ── water body: near-black, with moonlight bleeding through thin crests
   float NdL = max(dot(N, uMoonDir), 0.0);
   vec3 body = vec3(0.0025, 0.0085, 0.014)*(0.5 + 0.5*uMoonVis) + vec3(0.001, 0.006, 0.009)*NdL*moonLit;
-  float crest = smoothstep(-1.0, 8.0, vWorld.y);
+  float crest = smoothstep(-1.0, 12.0, vWorld.y);
   float toward = pow(max(dot(V, -normalize(vec3(uMoonDir.x, 0.0, uMoonDir.z))), 0.0), 3.0);
   body += vec3(0.004, 0.050, 0.055)*toward*crest*moonLit*(0.35 + 0.65*(1.0 - smoothstep(0.5, 0.85, J)));
 
@@ -634,6 +634,7 @@ const helmsman = new THREE.Group();
   for (const s of [-1, 1]) cyl(new V3(0, 0, s * 0.16), new V3(0.03, 0.88, s * 0.11), 0.085, M.foulies, f);
   const torso = addMesh(new THREE.CapsuleGeometry(0.2, 0.38, 6, 14), M.foulies, f); torso.position.set(0.07, 1.2, 0); torso.rotation.z = -0.2;
   const hood = addMesh(new THREE.SphereGeometry(0.135, 16, 12), M.foulies, f); hood.position.set(0.16, 1.66, 0);
+  f.userData.body = [torso, hood];                              // hidden when the camera is the helmsman's eyes
   for (const s of [-1, 1]) {
     cyl(new V3(0.1, 1.42, s * 0.22), new V3(0.34, 1.16, s * 0.33), 0.062, M.foulies, f);
     cyl(new V3(0.34, 1.16, s * 0.33), new V3(0.6, 1.2, s * 0.3), 0.055, M.foulies, f);
@@ -836,8 +837,9 @@ controls.enableDamping = true; controls.dampingFactor = 0.06;
 controls.enablePan = false; controls.minDistance = 11; controls.maxDistance = 190; controls.maxPolarAngle = Math.PI * 0.56;
 controls.target.set(0, 5.5, 0);
 const CAMS = [
+  { name: 'captain', fov: 72 },                                   // through the helmsman's eyes (default)
+  { name: 'deck', fov: 66 },                                      // just astern, over the helmsman's shoulder
   { name: 'chase', pos: [-24, 5.0, 25], fov: 42 },
-  { name: 'deck', fov: 68 },
   { name: 'aerial', pos: [-70, 46, 62], fov: 36 },
   { name: 'bow-on', pos: [34, 5, -6], fov: 40 },
 ];
@@ -847,7 +849,8 @@ function setCam(i) {
   camIdx = (i + CAMS.length) % CAMS.length;
   const c = CAMS[camIdx];
   camera.fov = c.fov; camera.updateProjectionMatrix();
-  controls.enabled = c.name !== 'deck';
+  controls.enabled = !!c.pos;                                     // the two on-board views are fixed to the boat
+  helmsman.userData.body.forEach(m => m.visible = c.name !== 'captain');
   if (c.pos) {                                                   // presets are framed relative to the boat's heading
     camera.position.set(c.pos[0], c.pos[1], c.pos[2]).applyAxisAngle(Y_AXIS, camHeading - 0.62);
     camera.position.y += controls.target.y - 5.5; camLift = 0;
@@ -864,10 +867,10 @@ function polar(aw) {
   for (let i = 1; i < POLAR.length; i++) if (d <= POLAR[i][0]) { const [a0, v0] = POLAR[i - 1], [a1, v1] = POLAR[i]; return lerp(v0, v1, (d - a0) / (a1 - a0)); }
   return POLAR[POLAR.length - 1][1];
 }
-const START = { heading: 0.62, rudder: 0, trim: 0.75, twa: 0.55, side: 1, luff: 0, boom: -0.30, roll: -0.3, vy: 0, vp: 0, vr: 0, pY: null, speed: 3.4, capsized: false, risk: 0 };
-const SEA = { gain: 0.88, j0: 0.50, j1: 0.72, b0: 0.68, b1: 0.98, t0: 0.45, t1: 0.95 };   // breaking-sea knockdown tuning
+const START = { heading: 0.62, rudder: 0, trim: 0.75, twa: 0.55, side: 1, luff: 0, boom: -0.30, roll: -0.3, vy: 0, vp: 0, vr: 0, pY: null, speed: 3.4, capsized: false, risk: 0, broachT: 0 };
+const SEA = { gain: 1.1, j0: 0.55, j1: 0.82, b0: 0.60, b1: 0.92, t0: 0.45, t1: 0.95, slope: 0.3, broach: 0.5 };   // breaking-sea knockdown tuning
 const CAPSIZE_ROLL = 1.2;                                        // rad (~69°): past this she does not come back
-const st = { capsized: false, capDir: 0, capT: 0, capWhy: '', afloat: 0, risk: 0, capsizes: 0, heading: 0.62, rudder: 0, trim: 0.75, twa: 0.55, side: 1, luff: 0, boom: -0.30, yaw: 0.62, pitch: 0, roll: -0.3, y: 0, vy: 0, vp: 0, vr: 0, pY: null, pP: 0, pR: 0, speed: 3.4, wx: 0, wz: 0, gust: 0, heel: 0, bowImm: 0 };
+const st = { broachT: 0, capsized: false, capDir: 0, capT: 0, capWhy: '', afloat: 0, risk: 0, capsizes: 0, heading: 0.62, rudder: 0, trim: 0.75, twa: 0.55, side: 1, luff: 0, boom: -0.30, yaw: 0.62, pitch: 0, roll: -0.3, y: 0, vy: 0, vp: 0, vr: 0, pY: null, pP: 0, pR: 0, speed: 3.4, wx: 0, wz: 0, gust: 0, heel: 0, bowImm: 0 };
 let simT = 40, paused = false, deckOn = true;
 const _v = new V3(), _b = new V3();
 
@@ -877,7 +880,7 @@ function stepBoat(dt, t) {
   const H = (ax, az) => surfaceH(st.wx + ax, st.wz + az, t);
   const hC = H(0, 0), hB = H(fx * 5.6, fz * 5.6), hS = H(-fx * 5.6, -fz * 5.6), hR = H(rx * 1.8, rz * 1.8), hL = H(-rx * 1.8, -rz * 1.8);
   st.gust = 0.5 + 0.5 * Math.sin(t * 0.41) * Math.sin(t * 0.87 + 1.3) + 0.15 * Math.sin(t * 2.3);
-  const exposed = sstep(-5.5, 3.5, st.y);                           // sheltered in the troughs, hammered on the crests
+  const exposed = sstep(-9.0, 5.5, st.y);                           // sheltered in the troughs, hammered on the crests
   // helm and sails: ←/→ rudder, ↑/↓ sheet in / ease. The sails set themselves to the wind angle.
   const live = st.capsized ? 0 : 1;
   st.rudder += (((keys.left ? 1 : 0) - (keys.right ? 1 : 0)) * live - st.rudder) * Math.min(1, dt * 3.5);
@@ -906,9 +909,12 @@ function stepBoat(dt, t) {
   waveDisp(st.wx, st.wz, t, _d, true);
   const breaking = 1 - sstep(SEA.j0, SEA.j1, _d.J);
   const beamK = sstep(SEA.b0, SEA.b1, Math.abs(Math.sin(st.twa)));
-  st.risk = beamK * (0.45 + 0.55 * st.trim);
+  // running too fast she surfs, the rudder loses its grip and she broaches: rounds up beam-on to the sea
+  const surf = sstep(7.0, 8.4, st.speed) * sstep(2.0, 2.4, aw) * live;
+  if (surf > 0.3) st.broachT = 6; else st.broachT = Math.max(0, st.broachT - dt);
+  st.risk = Math.max(beamK * (0.45 + 0.55 * st.trim), surf);
   const hit = breaking * beamK * (SEA.t0 + SEA.t1 * st.trim) * SEA.gain;
-  let tR = Math.atan2(hL - hR, 3.6) * 0.6 + st.heel - sgn * hit;
+  let tR = Math.atan2(hL - hR, 3.6) * (0.6 + SEA.slope * beamK) + st.heel - sgn * hit;   // beam-on she also rolls with every face
   if (st.capsized) tR = st.capDir * 2.85;
   if (st.pY === null) { st.pY = tY; st.pP = tP; st.pR = tR; st.y = tY; st.pitch = tP; st.roll = tR; }
   const dY = (tY - st.pY) / dt, dP = (tP - st.pP) / dt, dR = (tR - st.pR) / dt;   // rates of the water itself
@@ -922,13 +928,14 @@ function stepBoat(dt, t) {
     st.afloat += dt;
     if (Math.abs(st.roll) > CAPSIZE_ROLL) {
       st.capsized = true; st.capDir = Math.sign(st.roll); st.capT = 0; st.capsizes++;
-      st.capWhy = st.trim > 0.6 ? 'Knocked down beam-on to a breaking sea with the sheets hard in.' : 'Rolled beam-on by a breaking sea.';
+      st.capWhy = st.broachT > 0 ? 'Surfing too fast down a wave, she broached and was rolled beam-on.' : st.trim > 0.6 ? 'Knocked down beam-on to a breaking sea with the sheets hard in.' : 'Rolled beam-on by a breaking sea.';
     }
   }
   const vT = 6.2 * polar(aw) * (0.4 + 0.8 * st.trim) * (1 - 0.15 * Math.abs(st.rudder)) * live;
   st.speed += ((vT - st.speed) * 0.5 - G * Math.sin(st.pitch) * 0.26) * dt;       // labours uphill, surges down the back
   st.speed = clamp(st.speed, -1.5, 9);
   st.heading += st.rudder * 0.34 * clamp(Math.max(st.speed, 0.9) / 3.0, 0.3, 1.3) * dt;
+  st.heading -= (st.twa >= 0 ? 1 : -1) * SEA.broach * surf * dt;
   st.heading += (st.twa >= 0 ? 1 : -1) * 0.10 * st.luff * (1 - clamp(st.speed / 2.5, 0, 1)) * dt;   // stalled head to wind, the bow falls off
   st.yaw = st.heading + 0.05 * Math.sin(t * 0.11) + 0.03 * Math.sin(t * 0.23 + 2.0) + 0.14 * Math.max(st.pitch, 0) * st.side;
   st.wx += fx * st.speed * dt; st.wz += fz * st.speed * dt;
@@ -997,6 +1004,7 @@ const msgEl = document.getElementById('msg');
 function stepGame(dt) {
   if (!st.capsized) return;
   if (st.capT === 0) {
+    st.camBefore = camIdx; if (!CAMS[camIdx].pos) setCam(CAMS.findIndex(c => c.name === 'chase'));
     const m = Math.floor(st.afloat / 60), sec = Math.floor(st.afloat % 60);
     document.getElementById('msg-why').innerHTML = st.capWhy + '<br>You stayed afloat for <b>' + m + ':' + String(sec).padStart(2, '0') + '</b>. Keep the bow or stern to the seas, and ease the sheets (↓) when beam-on.';
     msgEl.classList.add('on');
@@ -1007,7 +1015,7 @@ function stepGame(dt) {
   }
   st.capT += dt;
   document.getElementById('msg-n').textContent = Math.max(1, Math.ceil(5 - st.capT));
-  if (st.capT >= 5) { Object.assign(st, START, { afloat: 0 }); msgEl.classList.remove('on'); }
+  if (st.capT >= 5) { Object.assign(st, START, { afloat: 0 }); msgEl.classList.remove('on'); setCam(st.camBefore); }
 }
 let moonVisS = 1;
 function stepSky(dt, t) {
@@ -1023,9 +1031,16 @@ function stepSky(dt, t) {
 function stepCamera(dt, t) {
   const c = CAMS[camIdx];
   const dH = st.heading - camHeading; camHeading = st.heading;
-  if (c.name === 'deck') {
-    _v.set(-7.15, deckY(-7.15, 0) + 2.45, 1.2); boat.localToWorld(_v); camera.position.copy(_v);
-    _b.set(9, DK + 2.6, -0.5); boat.localToWorld(_b);
+  if (!c.pos) {
+    if (c.name === 'captain') {
+      _v.set(0.2, 1.72, 0); helmsman.localToWorld(_v);                 // eye level at the wheel
+      _b.set(9, DK + 0.9, 0); boat.localToWorld(_b);
+    } else {
+      _v.set(-9.4, deckY(-7.4, 0) + 2.75, 0.55); boat.localToWorld(_v);
+      _b.set(9, DK + 1.9, -0.2); boat.localToWorld(_b);
+    }
+    _v.y = Math.max(_v.y, surfaceH(st.wx + _v.x, st.wz + _v.z, t) + 0.9);
+    camera.position.copy(_v);
     camera.up.set(0, 1, 0).applyAxisAngle(_v.set(Math.cos(st.yaw), 0, -Math.sin(st.yaw)), st.roll * 0.45);
     camera.lookAt(_b);
     return;
@@ -1045,7 +1060,7 @@ function stepCamera(dt, t) {
     const hw = surfaceH(st.wx + camera.position.x * (1 - f), st.wz + camera.position.z * (1 - f), t) + 0.4;
     want = Math.max(want, (hw - f * sightY) / (1 - f) - camera.position.y);
   }
-  want = Math.min(want, 30);
+  want = Math.min(want, 40);
   camLift = lerp(camLift, want, 1 - Math.exp(-dt * 2.2));
   if (camera.position.y + camLift < hCam + 1.5) camLift = hCam + 1.5 - camera.position.y;
   camera.position.y += camLift;
